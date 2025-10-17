@@ -2,38 +2,44 @@
 import express from "express";
 import nodemailer from "nodemailer";
 import cors from "cors";
+import dotenv from "dotenv";
 
-// ✅ Define env variables here (for testing only, not for production!)
-const EMAIL_HOST = "smtp.gmail.com";
-const EMAIL_PORT = 587;
-const EMAIL_USER = "rrvyapar@gmail.com";
-const EMAIL_PASS = "rvffpyxuwkwfthwq";
-const EMAIL_TO = "rrvyapar@gmail.com";
+// Load environment variables
+dotenv.config();
 
 const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json()); // parse JSON from frontend
+app.use(express.json());
 
-// Create transporter
+// ✅ Check if API key is loaded
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+if (!SENDGRID_API_KEY) {
+  console.error("❌ SENDGRID_API_KEY is missing. Set it in .env or Render secrets!");
+  process.exit(1);
+}
+
+// Email addresses
+const EMAIL_FROM = "RR Vyapar <rrvyapar@gmail.com>"; // verified sender in SendGrid
+const EMAIL_TO = "rrvyapar@gmail.com"; // recipient email
+
+// Create transporter using SendGrid
 const transporter = nodemailer.createTransport({
-  host: EMAIL_HOST,
-  port: EMAIL_PORT,
-  secure: false, // 587 is not secure
+  service: "SendGrid",
   auth: {
-    user: EMAIL_USER,
-    pass: EMAIL_PASS,
+    user: "apikey", // literal string "apikey"
+    pass: SENDGRID_API_KEY,
   },
 });
 
 // Verify transporter
 transporter.verify((error, success) => {
-  if (error) console.log("Mailer Error:", error);
-  else console.log("Server is ready to send emails");
+  if (error) console.error("Mailer verification error:", error);
+  else console.log("✅ Server is ready to send emails via SendGrid");
 });
 
-// Route
+// Registration route
 app.post("/send-registration", async (req, res) => {
   try {
     const {
@@ -50,12 +56,12 @@ app.post("/send-registration", async (req, res) => {
     } = req.body;
 
     const mailOptions = {
-      from: `"RR Vyapar Registration" <${EMAIL_USER}>`,
+      from: EMAIL_FROM,
       to: EMAIL_TO,
       subject: `New Registration: ${name || phone}`,
       html: `
         <h3>New RR Vyapar Registration</h3>
-        <p><strong>Phone:</strong> ${phone}</p>
+        <p><strong>Phone:</strong> ${phone || "N/A"}</p>
         <p><strong>Name:</strong> ${name || "N/A"}</p>
         <p><strong>Email:</strong> ${email || "N/A"}</p>
         <p><strong>Equity Exp:</strong> ${equityExp || "N/A"}</p>
@@ -69,15 +75,16 @@ app.post("/send-registration", async (req, res) => {
     };
 
     await transporter.sendMail(mailOptions);
+    console.log("✅ Registration email sent:", name || phone);
     res.status(200).json({ message: "Email sent successfully!" });
   } catch (error) {
-    console.error("Send Email Error:", error);
+    console.error("❌ Send Email Error:", error);
     res.status(500).json({ message: "Failed to send email" });
   }
 });
 
 // Start server
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
