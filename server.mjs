@@ -1,45 +1,27 @@
-// server.js
+// server.mjs
 import express from "express";
-import nodemailer from "nodemailer";
 import cors from "cors";
 import dotenv from "dotenv";
+import sgMail from "@sendgrid/mail";
 
-// Load environment variables
+// ✅ Load environment variables from .env (only used locally)
 dotenv.config();
 
 const app = express();
 
-// Middleware
+// ✅ Middleware
 app.use(cors());
 app.use(express.json());
 
-// ✅ Check if API key is loaded
-const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
-if (!SENDGRID_API_KEY) {
-  console.error("❌ SENDGRID_API_KEY is missing. Set it in .env or Render secrets!");
-  process.exit(1);
-}
+// ✅ Set SendGrid API key
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-// Email addresses
-const EMAIL_FROM = "RR Vyapar <rrvyapar@gmail.com>"; // verified sender in SendGrid
-const EMAIL_TO = "rrvyapar@gmail.com"; // recipient email
-
-// Create transporter using SendGrid
-const transporter = nodemailer.createTransport({
-  service: "SendGrid",
-  auth: {
-    user: "apikey", // literal string "apikey"
-    pass: SENDGRID_API_KEY,
-  },
+// ✅ Verify basic setup route
+app.get("/", (req, res) => {
+  res.send("RR Vyapar Mailer API is running ✅");
 });
 
-// Verify transporter
-transporter.verify((error, success) => {
-  if (error) console.error("Mailer verification error:", error);
-  else console.log("✅ Server is ready to send emails via SendGrid");
-});
-
-// Registration route
+// ✅ Email sending route
 app.post("/send-registration", async (req, res) => {
   try {
     const {
@@ -55,15 +37,16 @@ app.post("/send-registration", async (req, res) => {
       reason,
     } = req.body;
 
-    const mailOptions = {
-      from: EMAIL_FROM,
-      to: EMAIL_TO,
+    // ✅ Email details
+    const msg = {
+      to: process.env.TO_EMAIL, // recipient (your inbox)
+      from: process.env.FROM_EMAIL, // verified sender in SendGrid
       subject: `New Registration: ${name || phone}`,
       html: `
-        <h3>New RR Vyapar Registration</h3>
-        <p><strong>Phone:</strong> ${phone || "N/A"}</p>
+        <h2>New RR Vyapar Registration</h2>
         <p><strong>Name:</strong> ${name || "N/A"}</p>
         <p><strong>Email:</strong> ${email || "N/A"}</p>
+        <p><strong>Phone:</strong> ${phone || "N/A"}</p>
         <p><strong>Equity Exp:</strong> ${equityExp || "N/A"}</p>
         <p><strong>F&O Exp:</strong> ${fnoExp || "N/A"}</p>
         <p><strong>Fresher:</strong> ${isFresher ? "Yes" : "No"}</p>
@@ -74,17 +57,21 @@ app.post("/send-registration", async (req, res) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
-    console.log("✅ Registration email sent:", name || phone);
-    res.status(200).json({ message: "Email sent successfully!" });
+    // ✅ Send the email
+    await sgMail.send(msg);
+
+    console.log("✅ Email sent successfully!");
+    res.status(200).json({ success: true, message: "Email sent successfully" });
   } catch (error) {
-    console.error("❌ Send Email Error:", error);
-    res.status(500).json({ message: "Failed to send email" });
+    console.error("❌ Send Email Error:", error.response?.body || error.message);
+    res.status(500).json({
+      success: false,
+      message: "Failed to send email",
+      error: error.response?.body || error.message,
+    });
   }
 });
 
-// Start server
+// ✅ Use dynamic port for Render
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
